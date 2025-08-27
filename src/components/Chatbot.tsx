@@ -12,12 +12,14 @@ interface Message {
   timestamp: Date;
 }
 
+const PRODUCT_API = 'https://fakestoreapi.com/products';
+
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
-      text: "Hello! I'm your kitchen assistant. How can I help you today?",
+      text: "Hi! I'm your kitchen assistant. Ask me anything about products, prices, stock, discounts, or shipping.",
       isBot: true,
       timestamp: new Date(),
     },
@@ -26,35 +28,13 @@ const Chatbot: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll on new messages
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
 
-  // Send full conversation to n8n
-  const sendMessageToN8n = async (conversation: Message[]): Promise<string> => {
-    try {
-      const response = await fetch(
-        'https://mutegwaraba.app.n8n.cloud/webhook/ai-assist',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ conversation }),
-        }
-      );
-
-      if (!response.ok) throw new Error(`n8n returned ${response.status}`);
-      const data = await response.json();
-      return data.reply || "Sorry, I didn't understand that.";
-    } catch (err) {
-      console.error('Chatbot error:', err);
-      return '⚠️ Couldn’t connect to assistant. Please try again later.';
-    }
-  };
-
-  // Send message
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
@@ -70,7 +50,7 @@ const Chatbot: React.FC = () => {
     setInputValue('');
     setIsTyping(true);
 
-    const botReplyText = await sendMessageToN8n(updatedMessages);
+    const botReplyText = await getBotReply(updatedMessages);
 
     const botMessage: Message = {
       id: updatedMessages.length + 1,
@@ -90,9 +70,55 @@ const Chatbot: React.FC = () => {
     }
   };
 
+  // Bot reply logic
+  const getBotReply = async (conversation: Message[]): Promise<string> => {
+    const lastMessage = conversation[conversation.length - 1].text.toLowerCase();
+
+    // Product queries
+    if (lastMessage.includes('price') || lastMessage.includes('stock') || lastMessage.includes('discount')) {
+      try {
+        const res = await fetch(PRODUCT_API);
+        const products = await res.json();
+        const matching = products.filter((p: any) => lastMessage.includes(p.title.toLowerCase()));
+        if (matching.length) {
+          return matching.map((p: any) =>
+            `${p.title}: $${p.price.toFixed(2)} - Stock: ${Math.floor(Math.random() * 50 + 10)}`
+          ).join('; ');
+        } else {
+          return "I couldn't find that product. Can you specify the exact product name?";
+        }
+      } catch {
+        return "⚠️ Couldn't fetch product info right now.";
+      }
+    }
+
+    // Shipment queries
+    if (lastMessage.includes('order') || lastMessage.includes('shipment') || lastMessage.includes('delivery')) {
+      const orderIdMatch = lastMessage.match(/([a-zA-Z]\d+)/);
+      if (!orderIdMatch) return "Please provide your order ID to check shipment status.";
+
+      // Mock shipment data
+      return `Order ${orderIdMatch[1]} is currently Shipped. Estimated delivery: 2025-09-05.`;
+    }
+
+    // Fallback to n8n AI
+    try {
+      const response = await fetch('https://mutegwaraba.app.n8n.cloud/webhook/ai-assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversation }),
+      });
+      if (!response.ok) throw new Error('n8n error');
+      const data = await response.json();
+      return data.reply || "I couldn't understand that. Can you rephrase?";
+    } catch {
+      return "⚠️ Couldn't connect to assistant. Try again later.";
+    }
+  };
+
   return (
     <>
-      {/* Floating Chat Button */}
+      {/* Floating Button */}
       <Button
         onClick={() => setIsOpen(!isOpen)}
         className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-warm hover:shadow-glow transition-all duration-300 z-50"
@@ -116,30 +142,18 @@ const Chatbot: React.FC = () => {
           </CardHeader>
 
           <CardContent className="p-0 flex flex-col h-80">
-            {/* Messages */}
             <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
               <div className="space-y-4">
                 {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex gap-2 ${message.isBot ? 'justify-start' : 'justify-end'}`}
-                  >
+                  <div key={message.id} className={`flex gap-2 ${message.isBot ? 'justify-start' : 'justify-end'}`}>
                     {message.isBot && (
                       <div className="w-6 h-6 bg-gradient-warm rounded-full flex items-center justify-center flex-shrink-0">
                         <Bot className="w-3 h-3 text-white" />
                       </div>
                     )}
-
-                    <div
-                      className={`max-w-[80%] p-3 rounded-lg text-sm ${
-                        message.isBot
-                          ? 'bg-muted text-foreground'
-                          : 'bg-primary text-primary-foreground'
-                      }`}
-                    >
+                    <div className={`max-w-[80%] p-3 rounded-lg text-sm ${message.isBot ? 'bg-muted text-foreground' : 'bg-primary text-primary-foreground'}`}>
                       {message.text}
                     </div>
-
                     {!message.isBot && (
                       <div className="w-6 h-6 bg-secondary rounded-full flex items-center justify-center flex-shrink-0">
                         <User className="w-3 h-3 text-white" />
@@ -148,7 +162,6 @@ const Chatbot: React.FC = () => {
                   </div>
                 ))}
 
-                {/* Typing Indicator */}
                 {isTyping && (
                   <div className="flex gap-2 justify-start">
                     <div className="w-6 h-6 bg-gradient-warm rounded-full flex items-center justify-center">
@@ -157,14 +170,8 @@ const Chatbot: React.FC = () => {
                     <div className="bg-muted p-3 rounded-lg">
                       <div className="flex gap-1">
                         <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                        <div
-                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
-                          style={{ animationDelay: '0.1s' }}
-                        ></div>
-                        <div
-                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
-                          style={{ animationDelay: '0.2s' }}
-                        ></div>
+                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                       </div>
                     </div>
                   </div>
@@ -172,21 +179,16 @@ const Chatbot: React.FC = () => {
               </div>
             </ScrollArea>
 
-            {/* Input */}
             <div className="p-4 border-t">
               <div className="flex gap-2">
                 <Input
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Ask about products, prices, stock..."
+                  placeholder="Ask about products, prices, stock, discounts, or shipping..."
                   className="flex-1"
                 />
-                <Button
-                  onClick={handleSendMessage}
-                  size="icon"
-                  className="bg-gradient-warm hover:shadow-soft transition-all"
-                >
+                <Button onClick={handleSendMessage} size="icon" className="bg-gradient-warm hover:shadow-soft transition-all">
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
