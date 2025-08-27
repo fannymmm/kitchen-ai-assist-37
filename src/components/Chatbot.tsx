@@ -1,103 +1,198 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, MessageCircle, X, Bot, User } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Message {
-  role: "user" | "assistant";
+  id: number;
   text: string;
+  isBot: boolean;
+  timestamp: Date;
 }
 
 const Chatbot: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", text: "Hello! I'm your kitchen assistant. How can I help you today?" },
+    {
+      id: 1,
+      text: "Hello! I'm your kitchen assistant. How can I help you today?",
+      isBot: true,
+      timestamp: new Date(),
+    },
   ]);
-  const [input, setInput] = useState("");
-  const [open, setOpen] = useState(false); // ✅ controls whether chat is visible
+  const [inputValue, setInputValue] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // 🔗 Send the full conversation to n8n
-  async function sendMessageToN8n(conversation: Message[]): Promise<string> {
-    try {
-      const response = await fetch("https://mutegwaraba.app.n8n.cloud/webhook/ai-assist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversation }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`n8n returned ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.reply || "Sorry, I didn’t understand that.";
-    } catch (err) {
-      console.error("Chatbot error:", err);
-      return "⚠️ Couldn’t connect to assistant. Please try again later.";
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
-  }
+  }, [messages, isTyping]);
 
-  // 📨 Handle sending messages
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    const userMsg = input.trim();
+  // Send full conversation to n8n
+  const sendMessageToN8n = async (conversation: Message[]): Promise<string> => {
+    try {
+      const response = await fetch(
+        'https://mutegwaraba.app.n8n.cloud/webhook/ai-assist',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation }),
+        }
+      );
 
-    setMessages((prev) => {
-      const updated = [...prev, { role: "user", text: userMsg }];
-      setInput("");
+      if (!response.ok) throw new Error(`n8n returned ${response.status}`);
+      const data = await response.json();
+      return data.reply || "Sorry, I didn't understand that.";
+    } catch (err) {
+      console.error('Chatbot error:', err);
+      return '⚠️ Couldn’t connect to assistant. Please try again later.';
+    }
+  };
 
-      // Send full chat history to n8n
-      sendMessageToN8n(updated).then((reply) => {
-        setMessages((final) => [...final, { role: "assistant", text: reply }]);
-      });
+  // Send message
+  const handleSendMessage = async () => {
+    if (!inputValue.trim()) return;
 
-      return updated;
-    });
+    const userMessage: Message = {
+      id: messages.length + 1,
+      text: inputValue.trim(),
+      isBot: false,
+      timestamp: new Date(),
+    };
+
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
+    setInputValue('');
+    setIsTyping(true);
+
+    const botReplyText = await sendMessageToN8n(updatedMessages);
+
+    const botMessage: Message = {
+      id: updatedMessages.length + 1,
+      text: botReplyText,
+      isBot: true,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, botMessage]);
+    setIsTyping(false);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
   };
 
   return (
     <>
-      {/* 💬 Floating Chat Button */}
-      <button
-        onClick={() => setOpen(!open)}
-        className="fixed bottom-5 right-5 bg-orange-500 text-white p-4 rounded-full shadow-lg z-50"
+      {/* Floating Chat Button */}
+      <Button
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-warm hover:shadow-glow transition-all duration-300 z-50"
+        size="icon"
       >
-        💬
-      </button>
+        {isOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
+      </Button>
 
       {/* Chat Window */}
-      {open && (
-        <div className="fixed bottom-20 right-5 w-80 bg-white border shadow-lg rounded-lg flex flex-col z-50">
-          <div className="p-2 font-bold bg-orange-500 text-white rounded-t-lg">
-            Kitchen Assistant
-          </div>
-          <div className="p-2 flex-1 overflow-y-auto max-h-64">
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`my-1 p-2 rounded ${
-                  msg.role === "user"
-                    ? "bg-gray-200 text-right"
-                    : "bg-orange-100 text-left"
-                }`}
-              >
-                {msg.text}
+      {isOpen && (
+        <Card className="fixed bottom-24 right-6 w-80 h-96 shadow-card z-40 animate-fade-in bg-gradient-card">
+          <CardHeader className="bg-gradient-hero text-white rounded-t-lg">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Bot className="w-5 h-5" />
+              Kitchen Assistant
+              <div className="ml-auto flex items-center gap-1">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span className="text-xs">Online</span>
               </div>
-            ))}
-          </div>
-          <div className="flex p-2 border-t">
-            <input
-              type="text"
-              value={input}
-              placeholder="Ask about products, prices, stock..."
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              className="flex-1 border rounded px-2"
-            />
-            <button
-              onClick={handleSend}
-              className="ml-2 bg-orange-500 text-white px-3 py-1 rounded"
-            >
-              Send
-            </button>
-          </div>
-        </div>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="p-0 flex flex-col h-80">
+            {/* Messages */}
+            <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+              <div className="space-y-4">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex gap-2 ${message.isBot ? 'justify-start' : 'justify-end'}`}
+                  >
+                    {message.isBot && (
+                      <div className="w-6 h-6 bg-gradient-warm rounded-full flex items-center justify-center flex-shrink-0">
+                        <Bot className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+
+                    <div
+                      className={`max-w-[80%] p-3 rounded-lg text-sm ${
+                        message.isBot
+                          ? 'bg-muted text-foreground'
+                          : 'bg-primary text-primary-foreground'
+                      }`}
+                    >
+                      {message.text}
+                    </div>
+
+                    {!message.isBot && (
+                      <div className="w-6 h-6 bg-secondary rounded-full flex items-center justify-center flex-shrink-0">
+                        <User className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Typing Indicator */}
+                {isTyping && (
+                  <div className="flex gap-2 justify-start">
+                    <div className="w-6 h-6 bg-gradient-warm rounded-full flex items-center justify-center">
+                      <Bot className="w-3 h-3 text-white" />
+                    </div>
+                    <div className="bg-muted p-3 rounded-lg">
+                      <div className="flex gap-1">
+                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                        <div
+                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                          style={{ animationDelay: '0.1s' }}
+                        ></div>
+                        <div
+                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                          style={{ animationDelay: '0.2s' }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+
+            {/* Input */}
+            <div className="p-4 border-t">
+              <div className="flex gap-2">
+                <Input
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Ask about products, prices, stock..."
+                  className="flex-1"
+                />
+                <Button
+                  onClick={handleSendMessage}
+                  size="icon"
+                  className="bg-gradient-warm hover:shadow-soft transition-all"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </>
   );
