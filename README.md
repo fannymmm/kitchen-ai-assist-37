@@ -10,7 +10,7 @@ There are several ways of editing your application.
 
 **Use Lovable**
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/e787bc9c-037d-48e7-9c85-f2370e99814e) and start prompting.
+Simply visit the [Lovable Project](https://kitchen-ai-assist-37.vercel.app/) and start prompting.
 
 Changes made via Lovable will be committed automatically to this repo.
 
