@@ -12,29 +12,49 @@ interface Message {
   timestamp: Date;
 }
 
-// Example product database (replace with real API)
-const products = [
-  { name: 'Plate', price: 5.99, stock: 120 },
-  { name: 'Fork', price: 2.49, stock: 200 },
-  { name: 'Knife Set', price: 89.99, stock: 50, discount: '10% off' },
-  { name: 'Pot Set', price: 149.99, stock: 30, discount: '25% off' },
-];
-
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: "Hi! I'm your kitchen assistant. Ask me anything about our products.", isBot: true, timestamp: new Date() }
+    {
+      id: 1,
+      text: "Hello! I'm your kitchen assistant. How can I help you today?",
+      isBot: true,
+      timestamp: new Date(),
+    },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
 
+  // Send full conversation to n8n
+  const sendMessageToN8n = async (conversation: Message[]): Promise<string> => {
+    try {
+      const response = await fetch(
+        'https://mutegwaraba.app.n8n.cloud/webhook/ai-assist',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation }),
+        }
+      );
+
+      if (!response.ok) throw new Error(`n8n returned ${response.status}`);
+      const data = await response.json();
+      return data.reply || "Sorry, I didn't understand that.";
+    } catch (err) {
+      console.error('Chatbot error:', err);
+      return '⚠️ Couldn’t connect to assistant. Please try again later.';
+    }
+  };
+
+  // Send message
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
@@ -45,51 +65,22 @@ const Chatbot: React.FC = () => {
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInputValue('');
     setIsTyping(true);
 
-    // Call AI / n8n endpoint to process message
-    const botReply = await getBotReply([...messages, userMessage]);
+    const botReplyText = await sendMessageToN8n(updatedMessages);
 
     const botMessage: Message = {
-      id: messages.length + 2,
-      text: botReply,
+      id: updatedMessages.length + 1,
+      text: botReplyText,
       isBot: true,
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, botMessage]);
+    setMessages((prev) => [...prev, botMessage]);
     setIsTyping(false);
-  };
-
-  const getBotReply = async (conversation: Message[]): Promise<string> => {
-    try {
-      const lastMessage = conversation[conversation.length - 1].text.toLowerCase();
-
-      // Check local product knowledge first (optional)
-      for (let product of products) {
-        if (lastMessage.includes(product.name.toLowerCase())) {
-          let reply = `${product.name}: $${product.price.toFixed(2)} - Stock: ${product.stock}`;
-          if (product.discount) reply += ` - Discount: ${product.discount}`;
-          return reply;
-        }
-      }
-
-      // Send to AI endpoint (n8n) for human-like response
-      const response = await fetch('https://mutegwaraba.app.n8n.cloud/webhook/ai-assist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation }),
-      });
-
-      if (!response.ok) throw new Error(`n8n returned ${response.status}`);
-      const data = await response.json();
-      return data.reply || "I'm not sure about that. Could you clarify?";
-    } catch (err) {
-      console.error('AI error:', err);
-      return "⚠️ Couldn’t connect to assistant. Please try again later.";
-    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -101,7 +92,7 @@ const Chatbot: React.FC = () => {
 
   return (
     <>
-      {/* Floating Button */}
+      {/* Floating Chat Button */}
       <Button
         onClick={() => setIsOpen(!isOpen)}
         className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-warm hover:shadow-glow transition-all duration-300 z-50"
@@ -125,6 +116,7 @@ const Chatbot: React.FC = () => {
           </CardHeader>
 
           <CardContent className="p-0 flex flex-col h-80">
+            {/* Messages */}
             <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
               <div className="space-y-4">
                 {messages.map((message) => (
@@ -156,6 +148,7 @@ const Chatbot: React.FC = () => {
                   </div>
                 ))}
 
+                {/* Typing Indicator */}
                 {isTyping && (
                   <div className="flex gap-2 justify-start">
                     <div className="w-6 h-6 bg-gradient-warm rounded-full flex items-center justify-center">
@@ -164,8 +157,14 @@ const Chatbot: React.FC = () => {
                     <div className="bg-muted p-3 rounded-lg">
                       <div className="flex gap-1">
                         <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        <div
+                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                          style={{ animationDelay: '0.1s' }}
+                        ></div>
+                        <div
+                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                          style={{ animationDelay: '0.2s' }}
+                        ></div>
                       </div>
                     </div>
                   </div>
@@ -173,6 +172,7 @@ const Chatbot: React.FC = () => {
               </div>
             </ScrollArea>
 
+            {/* Input */}
             <div className="p-4 border-t">
               <div className="flex gap-2">
                 <Input
