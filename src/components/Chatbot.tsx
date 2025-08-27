@@ -12,15 +12,18 @@ interface Message {
   timestamp: Date;
 }
 
-// Replace with your real API endpoints
-const PRODUCT_API = 'https://fakestoreapi.com/products';
-const SHIPMENT_API = 'https://mockapi.io/your-project/shipments';
-const N8N_WEBHOOK = 'https://mutegwaraba.app.n8n.cloud/webhook/ai-assist';
+// Example product database (replace with real API)
+const products = [
+  { name: 'Plate', price: 5.99, stock: 120 },
+  { name: 'Fork', price: 2.49, stock: 200 },
+  { name: 'Knife Set', price: 89.99, stock: 50, discount: '10% off' },
+  { name: 'Pot Set', price: 149.99, stock: 30, discount: '25% off' },
+];
 
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: "Hi! I'm your kitchen assistant. Ask me anything about products, prices, discounts, or shipping.", isBot: true, timestamp: new Date() }
+    { id: 1, text: "Hi! I'm your kitchen assistant. Ask me anything about our products.", isBot: true, timestamp: new Date() }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -42,15 +45,15 @@ const Chatbot: React.FC = () => {
       timestamp: new Date(),
     };
 
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
+    setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsTyping(true);
 
-    const botReply = await getBotReply(updatedMessages);
+    // Call AI / n8n endpoint to process message
+    const botReply = await getBotReply([...messages, userMessage]);
 
     const botMessage: Message = {
-      id: updatedMessages.length + 1,
+      id: messages.length + 2,
       text: botReply,
       isBot: true,
       timestamp: new Date(),
@@ -64,36 +67,17 @@ const Chatbot: React.FC = () => {
     try {
       const lastMessage = conversation[conversation.length - 1].text.toLowerCase();
 
-      // 1️⃣ Check product info from API
-      if (lastMessage.includes('price') || lastMessage.includes('stock') || lastMessage.includes('discount')) {
-        const productRes = await fetch(PRODUCT_API);
-        const products = await productRes.json(); // Expected: [{name, price, stock, discount}, ...]
-        const matchingProducts = products.filter((p: any) => lastMessage.includes(p.name.toLowerCase()));
-        if (matchingProducts.length) {
-          return matchingProducts.map((p: any) => 
-            `${p.name}: $${p.price.toFixed(2)} - Stock: ${p.stock}${p.discount ? ` - Discount: ${p.discount}` : ''}`
-          ).join('; ');
-        } else {
-          return "Sorry, I couldn't find that product. Could you specify the exact product name?";
+      // Check local product knowledge first (optional)
+      for (let product of products) {
+        if (lastMessage.includes(product.name.toLowerCase())) {
+          let reply = `${product.name}: $${product.price.toFixed(2)} - Stock: ${product.stock}`;
+          if (product.discount) reply += ` - Discount: ${product.discount}`;
+          return reply;
         }
       }
 
-      // 2️⃣ Check shipping / order status from API
-      if (lastMessage.includes('shipment') || lastMessage.includes('delivery') || lastMessage.includes('order')) {
-        const orderIdMatch = lastMessage.match(/([a-zA-Z]\d+)/);
-        if (!orderIdMatch) return "Please provide your order ID to check shipment status.";
-
-        const shipmentRes = await fetch(`${SHIPMENT_API}/${orderIdMatch[1]}`);
-        if (shipmentRes.ok) {
-          const order = await shipmentRes.json(); // Expected: {orderId, status, estimatedDelivery}
-          return `Order ${order.orderId} is currently ${order.status}. Estimated delivery: ${order.estimatedDelivery}.`;
-        } else {
-          return "Sorry, I couldn't find that order. Please check the order ID.";
-        }
-      }
-
-      // 3️⃣ Fallback: send conversation to AI (n8n)
-      const response = await fetch(N8N_WEBHOOK, {
+      // Send to AI endpoint (n8n) for human-like response
+      const response = await fetch('https://mutegwaraba.app.n8n.cloud/webhook/ai-assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversation }),
@@ -117,7 +101,7 @@ const Chatbot: React.FC = () => {
 
   return (
     <>
-      {/* Floating Chat Button */}
+      {/* Floating Button */}
       <Button
         onClick={() => setIsOpen(!isOpen)}
         className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-warm hover:shadow-glow transition-all duration-300 z-50"
@@ -195,7 +179,7 @@ const Chatbot: React.FC = () => {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Ask about products, prices, discounts, or shipping..."
+                  placeholder="Ask about products, prices, stock..."
                   className="flex-1"
                 />
                 <Button
