@@ -12,6 +12,23 @@ interface Message {
   timestamp: Date;
 }
 
+// Async function to call the n8n webhook
+const sendMessageToN8n = async (userMessage: string): Promise<string> => {
+  try {
+    const response = await fetch("https://mutegwaraba.app.n8n.cloud/webhook/ai-assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: userMessage }),
+    });
+
+    const data = await response.json();
+    return data.reply || "Sorry, I didn’t get that.";
+  } catch (err) {
+    console.error("Error talking to n8n:", err);
+    return "⚠️ There was a connection problem. Please try again later.";
+  }
+};
+
 const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -47,39 +64,17 @@ const Chatbot = () => {
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate bot response (replace with actual AI integration)
-    setTimeout(() => {
+    (async () => {
+      const reply = await sendMessageToN8n(inputValue);
       const botResponse: Message = {
         id: messages.length + 2,
-        text: getBotResponse(inputValue),
+        text: reply,
         isBot: true,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, botResponse]);
       setIsTyping(false);
-    }, 1500);
-  };
-
-  const getBotResponse = (userInput: string): string => {
-    const input = userInput.toLowerCase();
-    
-    if (input.includes('knife') || input.includes('knives')) {
-      return "Our premium knife sets are perfect for any kitchen! We have stainless steel options starting at $89.99. Would you like to see our current deals?";
-    }
-    if (input.includes('pot') || input.includes('pan')) {
-      return "We have amazing copper and stainless steel cookware! Our bestselling pot set is currently 25% off at $149.99. Shall I check if it's in stock?";
-    }
-    if (input.includes('stock') || input.includes('available')) {
-      return "I can check our current inventory for you! Which specific product are you interested in?";
-    }
-    if (input.includes('price') || input.includes('cost')) {
-      return "Our prices range from $15 for basic utensils to $299 for premium sets. We have ongoing discounts on many items. What's your budget?";
-    }
-    if (input.includes('discount') || input.includes('sale')) {
-      return "Great timing! We have up to 30% off on selected items this week. Would you like me to show you our current deals?";
-    }
-    
-    return "That's a great question! Our kitchen experts are here to help. For detailed product information or to check availability, I recommend browsing our categories or speaking with our live support team.";
+    })();
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
