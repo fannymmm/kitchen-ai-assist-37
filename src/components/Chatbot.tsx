@@ -13,26 +13,33 @@ interface Message {
 }
 
 const PRODUCT_API = 'https://fakestoreapi.com/products';
+const STORAGE_KEY = 'chat_history';
 
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      text: "Hi! I'm your kitchen assistant. Ask me anything about products, prices, stock, discounts, or shipping.",
-      isBot: true,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved
+      ? JSON.parse(saved).map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }))
+      : [
+          {
+            id: 1,
+            text: "👋 Hi! I'm your kitchen assistant. Ask me about products, prices, stock, discounts, or shipping.",
+            isBot: true,
+            timestamp: new Date(),
+          },
+        ];
+  });
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll on new messages
+  // Auto-scroll + save to localStorage
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
   }, [messages, isTyping]);
 
   const handleSendMessage = async () => {
@@ -45,15 +52,14 @@ const Chatbot: React.FC = () => {
       timestamp: new Date(),
     };
 
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
+    setMessages((prev) => [...prev, userMessage]);
     setInputValue('');
     setIsTyping(true);
 
-    const botReplyText = await getBotReply(updatedMessages);
+    const botReplyText = await getBotReply([...messages, userMessage]);
 
     const botMessage: Message = {
-      id: updatedMessages.length + 1,
+      id: messages.length + 2,
       text: botReplyText,
       isBot: true,
       timestamp: new Date(),
@@ -83,9 +89,9 @@ const Chatbot: React.FC = () => {
         if (matching.length) {
           return matching.map((p: any) =>
             `${p.title}: $${p.price.toFixed(2)} - Stock: ${Math.floor(Math.random() * 50 + 10)}`
-          ).join('; ');
+          ).join('\n');
         } else {
-          return "I couldn't find that product. Can you specify the exact product name?";
+          return "🔎 I couldn't find that product. Can you specify the exact name?";
         }
       } catch {
         return "⚠️ Couldn't fetch product info right now.";
@@ -95,13 +101,11 @@ const Chatbot: React.FC = () => {
     // Shipment queries
     if (lastMessage.includes('order') || lastMessage.includes('shipment') || lastMessage.includes('delivery')) {
       const orderIdMatch = lastMessage.match(/([a-zA-Z]\d+)/);
-      if (!orderIdMatch) return "Please provide your order ID to check shipment status.";
-
-      // Mock shipment data
-      return `Order ${orderIdMatch[1]} is currently Shipped. Estimated delivery: 2025-09-05.`;
+      if (!orderIdMatch) return "📦 Please provide your order ID to check shipment status.";
+      return `✅ Order ${orderIdMatch[1]} is currently Shipped. Estimated delivery: 2025-09-05.`;
     }
 
-    // Fallback to n8n AI
+    // Try n8n AI
     try {
       const response = await fetch('https://mutegwaraba.app.n8n.cloud/webhook/ai-assist', {
         method: 'POST',
@@ -110,9 +114,10 @@ const Chatbot: React.FC = () => {
       });
       if (!response.ok) throw new Error('n8n error');
       const data = await response.json();
-      return data.reply || "I couldn't understand that. Can you rephrase?";
+      return data.reply || "🤔 I couldn't understand that. Can you rephrase?";
     } catch {
-      return "⚠️ Couldn't connect to assistant. Try again later.";
+      // Fallback local response
+      return "💡 I'm here but couldn't reach the AI assistant. Let's keep chatting — ask me about products, stock, or shipping!";
     }
   };
 
@@ -185,7 +190,7 @@ const Chatbot: React.FC = () => {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Ask about products, prices, stock, discounts, or shipping..."
+                  placeholder="Ask about products, prices, stock, or shipping..."
                   className="flex-1"
                 />
                 <Button onClick={handleSendMessage} size="icon" className="bg-gradient-warm hover:shadow-soft transition-all">
