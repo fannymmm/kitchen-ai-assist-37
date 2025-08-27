@@ -13,7 +13,10 @@ interface Message {
 }
 
 const PRODUCT_API = 'https://fakestoreapi.com/products';
-const STORAGE_KEY = 'chat_history';
+
+// Example: replace with real client session ID or userId if available
+const CLIENT_ID = 'client_123';
+const STORAGE_KEY = `chat_history_${CLIENT_ID}`;
 
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -34,12 +37,15 @@ const Chatbot: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll + save to localStorage
+  // Auto-scroll & save history
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+
+    // Cap at 100+ messages per client
+    const cappedMessages = messages.length > 100 ? messages.slice(messages.length - 100) : messages;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cappedMessages));
   }, [messages, isTyping]);
 
   const handleSendMessage = async () => {
@@ -116,7 +122,6 @@ const Chatbot: React.FC = () => {
       const data = await response.json();
       return data.reply || "🤔 I couldn't understand that. Can you rephrase?";
     } catch {
-      // Fallback local response
       return "💡 I'm here but couldn't reach the AI assistant. Let's keep chatting — ask me about products, stock, or shipping!";
     }
   };
@@ -134,7 +139,7 @@ const Chatbot: React.FC = () => {
 
       {/* Chat Window */}
       {isOpen && (
-        <Card className="fixed bottom-24 right-6 w-80 h-96 shadow-card z-40 animate-fade-in bg-gradient-card">
+        <Card className="fixed bottom-24 right-6 w-96 h-[32rem] shadow-card z-40 animate-fade-in bg-gradient-card">
           <CardHeader className="bg-gradient-hero text-white rounded-t-lg">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Bot className="w-5 h-5" />
@@ -146,8 +151,9 @@ const Chatbot: React.FC = () => {
             </CardTitle>
           </CardHeader>
 
-          <CardContent className="p-0 flex flex-col h-80">
-            <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+          <CardContent className="p-0 flex flex-col h-[28rem]">
+            {/* Scrollable area for 100+ messages */}
+            <ScrollArea className="flex-1 p-4 overflow-y-auto" ref={scrollAreaRef}>
               <div className="space-y-4">
                 {messages.map((message) => (
                   <div key={message.id} className={`flex gap-2 ${message.isBot ? 'justify-start' : 'justify-end'}`}>
@@ -184,6 +190,7 @@ const Chatbot: React.FC = () => {
               </div>
             </ScrollArea>
 
+            {/* Input */}
             <div className="p-4 border-t">
               <div className="flex gap-2">
                 <Input
